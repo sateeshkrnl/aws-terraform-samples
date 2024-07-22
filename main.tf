@@ -54,11 +54,12 @@ module "ccat-vpc" {
 resource "aws_instance" "ccat-server" {
   ami                         = "ami-0649bea3443ede307"
   instance_type               = "t2.micro"
+  count = 2
   subnet_id                   = module.ccat-vpc.ccat-public-subnet1-id
   key_name                    = "myec2key"
   associate_public_ip_address = true
   security_groups             = [module.ccat-vpc.ccat-public-sshgrp-id]
   tags = {
-    "Name" = "ccat-server"
+    "Name" = "ccat-server-${count.index}"
   }
 }
