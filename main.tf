@@ -15,44 +15,27 @@ provider "aws" {
 
 data "aws_availability_zones" "available" {}
 
-# module "ccat-vpc" {
-#   source = "terraform-aws-modules/vpc/aws"
-#   name   = "ccat-vpc"
-#   cidr   = "170.0.0.0/16"
-#   create_igw = true
-#   azs = data.aws_availability_zones.available.names
-#   # private_subnets = ["170.0.1.0/24","170.0.2.0/24"]
-#   # private_subnet_names = ["ccat-private-subnet1","ccat-private-subnet2"]
-#   public_subnet_names = ["ccat-public-subnet1"]
-#   public_subnets = ["170.0.3.0/24"]
-# }
+data "aws_ami" "amazon_ami" {   
+  # most_recent = true
+  most_recent = false
+  owners = [ "amazon" ]
+  filter {
+     name   = "name"
+    values = ["al2023-ami-2023.*20240722*-x86_64"]
+  }
+}
 
-# module "ccat-webserver" {
-#   source = "terraform-aws-modules/ec2-instance/aws"
-#   ami = "ami-0649bea3443ede307"
-#   name = "ccat-webserver"
-#   instance_type = "t2.micro"
-#   subnet_id = module.ccat-vpc.public_subnets[0]
-#   key_name = "myec2key"
-# }
-
-# resource "aws_route_table" "public_route_table" {
-#   vpc_id = module.ccat-vpc.vpc_id
-#   route {
-#     cidr_block = module.ccat-vpc.vpc_cidr_block
-#     gateway_id = "local"
-#   }
-#   route {
-#     cidr_block = "20.0.0.0/16"
-#     gateway_id = module.ccat-vpc.igw_id
-#   }
-# }
 module "ccat-vpc" {
   source = "./modules/vpc"
 }
 
+resource "aws_iam_instance_profile" "ccat-s3-iam-role" {
+  name = "ccat-s3-iam-role"
+  role = "CCATEC2S3Role"
+}
+
 resource "aws_instance" "ccat-server" {
-  ami                         = "ami-0649bea3443ede307"
+  ami                         = data.aws_ami.amazon_ami.id
   instance_type               = "t2.micro"
   count = 2
   subnet_id                   = module.ccat-vpc.ccat-public-subnet1-id
@@ -62,4 +45,14 @@ resource "aws_instance" "ccat-server" {
   tags = {
     "Name" = "ccat-server-${count.index}"
   }
+  iam_instance_profile = aws_iam_instance_profile.ccat-s3-iam-role.name
+  user_data = <<EOT
+#!/bin/bash
+yum update -y
+yum -y install java-17-amazon-corretto-headless
+EOT
 }
+
+output "ccat_server_instance_ids" {
+  value = [for server in aws_instance.ccat-server: server.public_ip]
+} 
